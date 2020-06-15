@@ -1,0 +1,37 @@
+diff --git a/package/gluon-respondd/files/etc/init.d/gluon-respondd b/package/gluon-respondd/files/etc/init.d/gluon-respondd
+index c7b071eb..b9d519ff 100755
+--- a/package/gluon-respondd/files/etc/init.d/gluon-respondd
++++ b/package/gluon-respondd/files/etc/init.d/gluon-respondd
+@@ -13,7 +13,31 @@ start_service() {
+ 	local clientdevs=$(for dev in $(echo "$ifdump" | jsonfilter -e "@.interface[@.interface='$(cat /lib/gluon/respondd/client.dev 2>/dev/null)' && @.up=true].device"); do echo " -i $dev -t $MAXDELAY";done;)
+ 
+ 	procd_open_instance
+-	procd_set_param command $DAEMON -d /usr/lib/respondd -p 1001 -g ff02::2:1001 $meshdevs -g ff05::2:1001 $clientdevs
++
++        # Neanderfunk patch begin. Author: rdiez
++
++        # A standard Gluon v2020.1.3 has this configuration line:
++        #
++        #   procd_set_param command $DAEMON -d /usr/lib/respondd -p 1001 -g ff02::2:1001 $meshdevs -g ff05::2:1001 $clientdevs
++        #
++        # However, respondd query packets in our network are coming on multicast address ff02::1 (note that there is
++        # no 1001 suffix in the address) on br-client ($clientdevs), so I have appended that address and device
++        # to the configuration line, see below.
++        #
++        # Multicast address ff02::1 means "all IPv6 hosts", so using it is probably not a good idea, because we may leak
++        # respondd information too far away. The trouble is that we would need to reconfigure the server side before
++        # changing the client configuration.
++        #
++        # Older firmware versions based on Gluon v2018.2.3 only had to add $clientdevs to multicast address ff02::2:1001,
++        # but that does not seem to work anymore, at least on Gluon v2020.1.3. The respondd and firewall configurations
++        # have remained the same, so I wonder how the old firmware managed to get requests on multicast address ff02::1
++        # without respondd actually subscribing to it. Maybe the new Linux kernel or something else in Gluon has become
++        # stricter in the newer version.
++
++        procd_set_param command $DAEMON -d /usr/lib/respondd -p 1001 -g ff02::2:1001 $meshdevs -g ff05::2:1001 $clientdevs  -g ff02::1 $clientdevs
++
++        # Neanderfunk patch end.
++
+ 	procd_set_param respawn ${respawn_threshold:-3600} ${respawn_timeout:-5} ${respawn_retry:-5}
+ 	procd_set_param stderr 1
+ 	procd_close_instance
